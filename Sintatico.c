@@ -18,6 +18,7 @@ TInfoAtomo lookahead;
 
 int escopo_atual = 0;      // 0 = global; 1, 2, 3... = uma rotina por numero
 int proximo_endereco = 0;  // proximo endereco livre no escopo atual
+int contador_escopo = 0;   // quantas rotinas ja foram declaradas
 
 // prototipos das funcoes da gramatica
 void programa(void);
@@ -164,22 +165,65 @@ void declaracao_de_rotinas(void){
 // <declaracao_de_funcao> ::= funcao <tipo> identificador <parametros_formais>
 //                            <declaracao_variaveis> <comando_composto>
 void declaracao_de_funcao(void){
+    char id[16];
+    int linha;
+    int escopo_anterior = escopo_atual;
+    int endereco_anterior = proximo_endereco;
+
     consome(FUNCAO);
     tipo();
+    if(lookahead.atomo != IDENTIFICADOR)
+        erro_sintatico("identificador");
+    strcpy(id, lookahead.atributo.id);
+    linha = lookahead.linha;
     consome(IDENTIFICADOR);
+
+    // o nome da rotina pertence ao escopo onde ela foi declarada (global)
+    if(insere_simbolo(id, CAT_FUNCAO, escopo_anterior, 0) == NULL)
+        erro_semantico("identificador ja declarado neste escopo", linha);
+
+    //abre o escopo da rotina
+    contador_escopo++;
+    escopo_atual = contador_escopo;
+    proximo_endereco = 0;
+
     parametros_formais();
     declaracao_variaveis();
     comando_composto();
+
+    // fecha o escopo e restaura o contexto
+    escopo_atual = escopo_anterior;
+    proximo_endereco = endereco_anterior;
 }
 
 // <declaracao_de_procedimento> ::= procedimento identificador <parametros_formais>
 //                                  <declaracao_variaveis> <comando_composto>
 void declaracao_de_procedimento(void){
+    char_i[16];
+    int linha;
+    int escopo_anterior = escopo_atual;
+    int endereco_anterior = proximo_endereco;
+
     consome(PROCEDIMENTO);
+    if(lookahead.atomo != IDENTIFICADOR)
+        erro_sintatico("identificador");
+    strcpy(id, lookahead.atributo.id);
+    linha = lookahead.linha;
+
     consome(IDENTIFICADOR);
+    if(insere_simbolo(id, CAT_PROCEDIMENTO, escopo_anterior, 0) == NULL)
+        erro_semantico("identificador ja declarado neste escopo", linha);
+
+    contador_escopo++;
+    escopo_atual = contador_escopo;
+    proximo_endereco = 0;
+
     parametros_formais();
     declaracao_variaveis();
     comando_composto();
+
+    escopo_atual = escopo_anterior;
+    proximo_endereco = endereco_anterior;
 }
 
 // <tipo> ::= caractere | inteiro | logico
