@@ -66,7 +66,6 @@ typedef struct{
 }TInfoAtomo;
 
 // variaveis globais (definidas no main.c e no Lex.c)
-extern char *nome_atomo[];   // nome do atomo na listagem (ex: ponto_virgula)
 extern char *simbolo_atomo[]; // simbolo do atomo nas mensagens de erro (ex: ;)
 extern char *buffer;
 

@@ -11,15 +11,19 @@ Para executar:
 #include <stdio.h>
 #include <stdlib.h>
 #include "Lex.h"
+#include "TabelaSimbolos.c"
 
 // variavel global do analisador sintatico
 TInfoAtomo lookahead;
+
+int escopo_atual = 0;      // 0 = global; 1, 2, 3... = uma rotina por numero
+int proximo_endereco = 0;  // proximo endereco livre no escopo atual
 
 // prototipos das funcoes da gramatica
 void programa(void);
 void bloco(void);
 void declaracao_variaveis(void);
-void lista_variaveis(void);
+int lista_variaveis(int categoria);
 void declaracao_de_rotinas(void);
 void declaracao_de_funcao(void);
 void declaracao_de_procedimento(void);
@@ -42,29 +46,11 @@ void termo(void);
 void operador_multiplicacao(void);
 void fator(void);
 
-// imprime um atomo reconhecido no formato "# linha:atomo[: atributo]"
-void imprime_atomo(TInfoAtomo info){
-    switch(info.atomo){
-        case IDENTIFICADOR:
-            printf("# %d:%s: %s\n", info.linha, nome_atomo[info.atomo], info.atributo.id);
-            break;
-        case CONSTINT:
-            printf("# %d:%s: %d\n", info.linha, nome_atomo[info.atomo], info.atributo.numero);
-            break;
-        case CONSTCHAR:
-            printf("# %d:%s: %c\n", info.linha, nome_atomo[info.atomo], info.atributo.ch);
-            break;
-        default:
-            printf("# %d:%s\n", info.linha, nome_atomo[info.atomo]);
-    }
-}
-
 // pede o proximo atomo ao lexico.
 // comentarios sao impressos e descartados aqui; erro lexico encerra o programa.
 TInfoAtomo proximo_atomo(void){
     TInfoAtomo info = obter_atomo();
     while(info.atomo == COMENTARIO){
-        imprime_atomo(info);
         info = obter_atomo();
     }
     if(info.atomo == ERRO){
@@ -81,6 +67,11 @@ void erro_sintatico(char *esperado){
     exit(1);
 }
 
+void erro_semantico(char *msg, int linha){
+    printf("# %d:erro semantico, %s\n", linha, msg);
+    exit(1);
+}
+
 // ponto de entrada do sintatico (chamado pelo main)
 void analisador_sintatico(void){
     lookahead = proximo_atomo();
@@ -91,7 +82,6 @@ void analisador_sintatico(void){
 
 void consome(TAtomo atomo){
     if(lookahead.atomo == atomo){
-        imprime_atomo(lookahead);
         lookahead = proximo_atomo();
     }
     else{
@@ -119,24 +109,46 @@ void bloco(void){
 void declaracao_variaveis(void){
     if(lookahead.atomo == VAR){
         consome(VAR);
-        lista_variaveis();
+        lista_variaveis(CAT_VARIAVEL);
         consome(PONTO_VIRGULA);
         while(lookahead.atomo == IDENTIFICADOR){
-            lista_variaveis();
+            lista_variaveis(CAT_VARIAVEL);
             consome(PONTO_VIRGULA);
         }
     }
 }
 
 // <lista_variaveis> ::= identificador { ',' identificador } ':' <tipo>
-void lista_variaveis(void){
+// categoria: CAT_VARIAVEL ou CAT_PARAMETRO (quem chama decide)
+// devolve quantos identificadores foram declarados
+int lista_variaveis(int categoria){
+    int qtd = 0;
+    char id[16];
+    int linha; 
+    if(lookahead.atomo != IDENTIFICADOR)
+        erro_sintatico("identificador");
+    strcpy(id, lookahead.atributo.id);   // guarda ANTES de consumir
+    linha = lookahead.linha;
     consome(IDENTIFICADOR);
+    if(insere_simbolo(id, categoria, escopo_atual, proximo_endereco) == NULL)
+        erro_semantico("identificador ja declarado neste escopo", linha);
+    proximo_endereco++;
+    qtd++;
     while(lookahead.atomo == VIRGULA){
         consome(VIRGULA);
+        if(lookahead.atomo != IDENTIFICADOR)
+            erro_sintatico("identificador");
+        strcpy(id, lookahead.atributo.id);
+        linha = lookahead.linha;
         consome(IDENTIFICADOR);
+        if(insere_simbolo(id, categoria, escopo_atual, proximo_endereco) == NULL)
+            erro_semantico("identificador ja declarado neste escopo", linha);
+        proximo_endereco++;
+        qtd++;
     }
     consome(DOIS_PONTOS);
     tipo();
+    return qtd;
 }
 
 // <declaracao_de_rotinas> ::= { <declaracao_de_funcao> | <declaracao_de_procedimento> }
@@ -197,7 +209,7 @@ void parametros_formais(void){
 void parametro_formal(void){
     if(lookahead.atomo == VAR)
         consome(VAR);
-    lista_variaveis();
+    lista_variaveis(CAT_PARAMETRO);
 }
 
 // <comando_composto> ::= inicio <comando> { ';' <comando> } fim
